@@ -9,22 +9,25 @@
 
 ### Usage:
 ```
-usage: main.py [-h] [-o] [-a] [-n N]
+usage: main.py [-h] [-r] [-n NAME] [-a] [-id COMPANY_SHARE_ID] [-s SHARES]
 
 MeroShare simplified for bulk actions.
-    - Find latest open issues
-    - Check the applied/unapplied issues
-    - Check IPO results
+    - Find currently open issues
+    - Check issue status (applied, unapplied, allotted or not-allotted)
 
 options:
-  -h, --help  show this help message and exit
-  -o          check if currently open issues are applied or unapplied
-  -a          apply to all unapplied, default False (means apply to the latest opened issue only)
-  -n N        number of shares to apply, default is 10
+  -h, --help            show this help message and exit
+  -r, --report          Check IPO allotment reports
+  -n NAME, --name NAME  Name of the user, runs the script for this user only, default is run for all users in accounts.csv file
+  -a, --apply           Apply to issues
+  -id COMPANY_SHARE_ID, --company-share-id COMPANY_SHARE_ID
+                        Company share id to apply, required when -a/--apply flag is set
+  -s SHARES, --shares SHARES
+                        Number of shares to apply, default is 10
 ```
 
 ### Screenshots
-<img width="902" alt="Screenshot 2023-11-07 at 10 29 59" src="https://github.com/ayerdines/meroshare-scripts/assets/34019794/ce60ef47-a4da-4024-9ffa-b244f0f62464">
+![Screenshot 2023-11-07 at 20.44.08.png](..%2F..%2F..%2F..%2Fvar%2Ffolders%2Ffd%2Fj830xrzn51g4qr1xl5__ysrh0000gn%2FT%2FTemporaryItems%2FNSIRD_screencaptureui_7swK11%2FScreenshot%202023-11-07%20at%2020.44.08.png)
 
 ### WIP
 - Feature to check the results of IPO allotments
