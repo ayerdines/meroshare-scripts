@@ -27,7 +27,7 @@ options:
 ```
 
 ### Screenshots
-![Screenshot 2023-11-07 at 20.44.08.png](..%2F..%2F..%2F..%2Fvar%2Ffolders%2Ffd%2Fj830xrzn51g4qr1xl5__ysrh0000gn%2FT%2FTemporaryItems%2FNSIRD_screencaptureui_7swK11%2FScreenshot%202023-11-07%20at%2020.44.08.png)
+<img width="875" alt="Screenshot 2023-11-07 at 20 45 57" src="https://github.com/ayerdines/meroshare-scripts/assets/34019794/6c2a0839-4abe-4781-a12e-27ce17e569e5">
 
 ### WIP
 - Feature to check the results of IPO allotments
