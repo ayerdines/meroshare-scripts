@@ -6,15 +6,18 @@ import constants
 from functools import cache, cached_property
 
 
-def find_accounts_from_csv():
+def find_accounts_from_csv(name=None):
     acs = []
     with open(constants.ACCOUNTS_CSV_PATH, newline='') as file:
         csv_reader = csv.DictReader(file)
+        if name:
+            row = next((item for item in csv_reader if item['name'] == name), None)
+            if row:
+                return [Account(row['name'], row['dp'], row['username'], row['password'], row['crn'], row['pin'])]
 
-        for row in csv_reader:
-            acs.append(
-                Account(row['name'], row['dp'], row['username'], row['password'], row['crn'], row['pin'])
-            )
+            raise argparse.ArgumentError(name_arg, f"user with name: {name} not found in accounts.csv file")
+        else:
+            acs.extend([Account(row['name'], row['dp'], row['username'], row['password'], row['crn'], row['pin']) for row in csv_reader])
 
     return acs
 
@@ -44,24 +47,33 @@ class Issue:
         self._json_data = json_data
 
     def __str__(self):
-        return ("""{name} - {subgroup} ({symbol}) - {share_type} ({share_group})
-{open_date} - {close_date}{sep}{status}{sep}""".format(sep=os.linesep,
-                                                       name=self.company_name,
-                                                       subgroup=self.subgroup,
-                                                       symbol=self.scrip,
-                                                       open_date=self.issue_open_date,
-                                                       close_date=self.issue_close_date,
-                                                       share_type=self.share_type_name,
-                                                       share_group=self.share_group_name,
-                                                       status=self.status.capitalize()))
+        return (
+            "******   COMPANY SHARE ID: {company_share_id}    ******{sep}{share_type} ({share_group}) - {subgroup}"
+            " ({symbol}) - {name}{sep}{open_date} - {close_date}{sep}{status}{sep}"
+            .format(
+                sep=os.linesep,
+                company_share_id=self.company_share_id,
+                name=self.company_name,
+                subgroup=self.subgroup,
+                symbol=self.scrip,
+                open_date=self.issue_open_date,
+                close_date=self.issue_close_date,
+                share_type=self.share_type_name,
+                share_group=self.share_group_name,
+                status=self.status.capitalize())
+            )
 
     @property
-    def is_unapplied_ordinary_ipo(self):
-        return self.is_ipo and self.is_ordinary_shares and not self.is_applied
+    def is_unapplied_ordinary_share(self):
+        return self.is_ordinary_shares and not self.is_applied
 
     @property
     def is_ipo(self):
         return True if self.share_type_name == 'IPO' else False
+
+    @property
+    def is_fpo(self):
+        return True if self.share_type_name == 'FPO' else False
 
     @property
     def is_ordinary_shares(self):
@@ -81,10 +93,6 @@ class Issue:
 
     @cached_property
     def subgroup(self):
-        return self._json_data.get("subGroup")
-
-    @cached_property
-    def sub_group(self):
         return self._json_data.get("subGroup")
 
     @cached_property
@@ -148,7 +156,8 @@ class UserSession:
 
     def set_branch_info(self):
         bank = self.bank_info()
-        r = requests.get(f"https://webbackend.cdsc.com.np/api/meroShare/bank/{bank['id']}", headers=self.authorization_headers)
+        r = requests.get(f"https://webbackend.cdsc.com.np/api/meroShare/bank/{bank['id']}",
+                         headers=self.authorization_headers)
         if r.ok:
             self.branch_info = r.json()
         else:
@@ -176,36 +185,24 @@ class UserSession:
         }
 
     def can_apply(self, company_share_id):
-        response = requests.get(f"https://webbackend.cdsc.com.np/api/meroShare/applicantForm/customerType/{company_share_id}/{self.demat}",
-                                headers=self.authorization_headers).json()
+        response = requests.get(
+            f"https://webbackend.cdsc.com.np/api/meroShare/applicantForm/customerType/{company_share_id}/{self.demat}",
+            headers=self.authorization_headers).json()
 
         return True if response['message'] == "Customer can apply." else False
 
-    def unapplied_issues(self):
-        return [issue for issue in self.open_issues() if issue.is_unapplied_ordinary_ipo]
+    def apply(self, number_of_shares, company_share_id):
+        issues = self.open_issues()
+        issue = next(
+            (item for item in issues if item.is_unapplied_ordinary_share and item.company_share_id == company_share_id),
+            None
+        )
 
-    def apply_latest(self, number_of_shares):
-        issues = self.unapplied_issues()
+        if not issue:
+            raise ValueError(f"UNAPPLIED ISSUE NOT FOUND!! -- {company_share_id}")
 
-        if len(issues) == 0:
-            print(f"NO ISSUES LEFT TO APPLY!! -- {self.account.name}")
-            return
-
-        self.apply(number_of_shares, issues[0])
-
-    def apply_to_all(self, number_of_shares):
-        issues = self.unapplied_issues()
-
-        if len(issues) == 0:
-            print(f"NO ISSUES LEFT TO APPLY!! -- {self.account.name}")
-            return
-
-        for issue in issues:
-            self.apply(number_of_shares, issue)
-
-    def apply(self, number_of_shares,  issue):
-        if not self.can_apply(issue.company_share_id):
-            print(f"CANNOT APPLY!! -- {issue.company_name}")
+        if not self.can_apply(company_share_id):
+            print(f"CANNOT APPLY!! -- {company_share_id}")
             return
 
         payload = {
@@ -217,16 +214,18 @@ class UserSession:
             "appliedKitta": str(number_of_shares),
             "crnNumber": self.account.crn,
             "transactionPIN": self.account.pin,
-            "companyShareId": str(issue.company_share_id),
+            "companyShareId": str(company_share_id),
             "bankId": self.branch_info['bankId']
         }
 
-        r = requests.post('https://webbackend.cdsc.com.np/api/meroShare/applicantForm/share/apply', json=payload, headers=self.authorization_headers)
+        r = requests.post('https://webbackend.cdsc.com.np/api/meroShare/applicantForm/share/apply',
+                          json=payload,
+                          headers=self.authorization_headers)
 
         if r.ok:
-            print(f"APPLIED SUCCESSFULLY!! -- {issue.company_name}")
+            print(f"APPLIED SUCCESSFULLY!! -- {company_share_id}")
         else:
-            print(f"APPLY UNSUCCESSFUL!! -- {issue.company_name}")
+            print(f"APPLY UNSUCCESSFUL!! -- {company_share_id}")
 
     @cache
     def open_issues(self):
@@ -258,17 +257,25 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""MeroShare simplified for bulk actions.
-    - Find open issues
-    - Check applied issue
-    - Check IPO allotments"""
+    - Find currently open issues
+    - Check issue status (applied, unapplied, allotted or not-allotted)"""
     )
 
-    parser.add_argument('-o', action='store_true', help='find currently open issues')
-    parser.add_argument('-a', action='store_true', help='apply to all unapplied, default is apply to the latest one', default=False)
-    parser.add_argument('-n', help='number of shares to apply', default=constants.SHARES)
+    parser.add_argument('-r', '--report', action='store_true', help='Check IPO allotment reports')
+    name_arg = parser.add_argument('-n', '--name',
+                                   help='Name of the user, runs the script for this user only, default is run for '
+                                        'all users in accounts.csv file')
+    parser.add_argument('-a', '--apply', action='store_true', help='Apply to issues', default=False)
+    share_id_arg = parser.add_argument('-id', '--company-share-id',
+                                       help='Company share id to apply, required when -a/--apply flag is set', type=int)
+    parser.add_argument('-s', '--shares', help='Number of shares to apply, default is 10', default=10)
     args = parser.parse_args()
 
-    accounts = find_accounts_from_csv()
+    if args.report:
+        print("Feature coming soon!!")
+        exit(0)
+
+    accounts = find_accounts_from_csv(args.name)
 
     for account in accounts:
         print("###################################################")
@@ -277,10 +284,13 @@ if __name__ == '__main__':
 
         user = UserSession(account=account)
 
-        if args.o:
+        if args.report:
+            print("Feature coming soon!!")
+        elif args.apply:
+            if not args.company_share_id:
+                raise argparse.ArgumentError(share_id_arg, "is required when -a/--apply flag is set, run the "
+                                                           "script without any args to find the company share id")
+            user.apply(args.shares, company_share_id=args.company_share_id)
+        else:
             open_issues = user.open_issues()
             print(*open_issues, sep="\n")
-        elif args.a:
-            user.apply_to_all(args.n)
-        else:
-            user.apply_latest(args.n)
