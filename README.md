@@ -6,7 +6,7 @@
 
 ### Usage:
 
-```shell
+```
 usage: main.py [-h] [-o] [-a] [-n N]
 
 MeroShare simplified for bulk actions.
