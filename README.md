@@ -27,34 +27,46 @@
     ```
 
 ## Examples
-### Apply IPO
+### Bulk Apply IPO
 1. List open IPOs:
     ```shell
     python3 main.py
     ```
-   This will list the currently Open IPOs and status whether they're applied by the user or not. It'll also show the `COMPANY SHARE ID`, a unique ID associated with an IPO. You'll need this to apply the IPO.
+   This will list the currently Open IPOs and their status whether the user applied. It'll also show the `COMPANY SHARE ID`, a unique ID associated with an IPO. You'll need this to apply for the IPO.
 
 2. Copy the `COMPANY SHARE ID` of the IPO you want to apply to.
-3. Apply to IPO:
+3. Bulk Apply IPO:
     ```shell
     python3 main.py -a -c 654 -n 10
     ```
-    This will skip the user for which the IPO has already been applied.  
-    If you'd like to apply IPO for a single user:
+   This will bulk apply IPO for all users in the `accounts.csv` file. It'll skip the user for which the IPO has already been applied.  
+
+4. If you'd like to apply IPO for a single user:
     ```shell
     python3 main.py -a -c 654 -n 10 -u ayerdines
     ```
 
 
 ## Usage
-### Run script for a single user present in the `account.csv` file
-```shell
-python3 main.py -u <user>
-```
-
 ### List open issues and check if they have been applied or not
 ```shell
 python3 main.py
+```
+
+### Bulk Apply IPO all the users present in the `account.csv` file
+```shell
+python3 main.py -a -c <company share id> -n <number of shares>
+```
+> Note: This will skip the user for which the IPO has already been applied. 
+
+### Apply IPO for a single user
+```shell
+python3 main.py -a -c <company share id> -n <number of shares> -u <user>
+```
+
+### Run script for a user
+```shell
+python3 main.py -u <user>
 ```
 
 ### Generate IPO allotment reports for a single user
