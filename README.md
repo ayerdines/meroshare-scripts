@@ -1,5 +1,5 @@
 ## Introduction
-`main.py` - This script can check for the latest open issues, find if they're applied or not, and apply to all opened issues or the last one only. These options are configurable using shell flags accepted by the script. The script only look for **Ordinary IPO shares**.
+`main.py` - This script can check for the latest open issues, find if they're applied or not, and apply to an IPO. These options are configurable using shell flags. The script only looks for **Ordinary IPO shares**.
 
 ## Install
 
