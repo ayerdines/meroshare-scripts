@@ -3,28 +3,29 @@ import os
 import argparse
 import requests
 import constants
+from datetime import date
 from functools import cache, cached_property
 
 
-def find_accounts_from_csv(name=None):
+def find_accounts_from_csv(user=None):
     acs = []
     with open(constants.ACCOUNTS_CSV_PATH, newline='') as file:
         csv_reader = csv.DictReader(file)
-        if name:
-            row = next((item for item in csv_reader if item['name'] == name), None)
+        if user:
+            row = next((item for item in csv_reader if item['user'] == user), None)
             if row:
-                return [Account(row['name'], row['dp'], row['username'], row['password'], row['crn'], row['pin'])]
+                return [Account(row['user'], row['dp'], row['username'], row['password'], row['crn'], row['pin'])]
 
-            raise argparse.ArgumentError(name_arg, f"user with name: {name} not found in accounts.csv file")
+            raise argparse.ArgumentError(name_arg, f"'{user}' user not found in accounts.csv file")
         else:
-            acs.extend([Account(row['name'], row['dp'], row['username'], row['password'], row['crn'], row['pin']) for row in csv_reader])
+            acs.extend([Account(row['user'], row['dp'], row['username'], row['password'], row['crn'], row['pin']) for row in csv_reader])
 
     return acs
 
 
 class Account:
-    def __init__(self, name, dp, username, password, crn, pin):
-        self.name = name
+    def __init__(self, user, dp, username, password, crn, pin):
+        self.user = user
         self.dp = dp
         self.client_id = self.get_client_id(dp)
         self.username = username
@@ -61,7 +62,7 @@ class Issue:
                 share_type=self.share_type_name,
                 share_group=self.share_group_name,
                 status=self.status.capitalize())
-            )
+        )
 
     @property
     def is_unapplied_ordinary_share(self):
@@ -161,18 +162,18 @@ class UserSession:
         if r.ok:
             self.branch_info = r.json()
         else:
-            raise ValueError("Unable to fetch banks for user: %s" % self.account.name)
+            raise ValueError("Unable to fetch banks for user: '%s'" % self.account.user)
 
     def bank_info(self):
         r = requests.get('https://webbackend.cdsc.com.np/api/meroShare/bank/', headers=self.authorization_headers)
         if r.ok:
             banks = r.json()
             if len(banks) == 0:
-                raise ValueError("No banks found for user: %s" % self.account.name)
+                raise ValueError("No banks found for user: '%s'" % self.account.user)
 
             return banks[0]
         else:
-            raise ValueError("Unable to fetch banks for user: %s" % self.account.name)
+            raise ValueError("Unable to fetch banks for user: '%s'" % self.account.user)
 
     @property
     def demat(self):
@@ -231,13 +232,33 @@ class UserSession:
     def open_issues(self):
         payload = {
             "filterFieldParams": [
-                {"key": "companyIssue.companyISIN.script", "alias": "Scrip"},
-                {"key": "companyIssue.companyISIN.company.name", "alias": "Company Name"},
-                {"key": "companyIssue.assignedToClient.name", "value": "", "alias": "Issue Manager"}
+                {
+                    "key": "companyIssue.companyISIN.script",
+                    "alias": "Scrip"
+                },
+                {
+                    "key": "companyIssue.companyISIN.company.name",
+                    "alias": "Company Name"
+                },
+                {
+                    "key": "companyIssue.assignedToClient.name",
+                    "value": "",
+                    "alias": "Issue Manager"
+                }
             ],
             "filterDateParams": [
-                {"key": "minIssueOpenDate", "condition": "", "alias": "", "value": ""},
-                {"key": "maxIssueCloseDate", "condition": "", "alias": "", "value": ""}
+                {
+                    "key": "minIssueOpenDate",
+                    "condition": "",
+                    "alias": "",
+                    "value": ""
+                },
+                {
+                    "key": "maxIssueCloseDate",
+                    "condition": "",
+                    "alias": "",
+                    "value": ""
+                }
             ],
             "page": 1,
             "size": 20,
@@ -248,9 +269,60 @@ class UserSession:
                           json=payload, headers=self.authorization_headers)
         if r.ok:
             objects = r.json()['object']
-            return [Issue(item) for item in objects]
+            return [Issue(_item) for _item in objects]
         else:
             raise ValueError("Error while getting open issues!!")
+
+    def generate_reports(self):
+        today = date.today()
+        two_months_ago = today.replace(month=today.month - 2)
+        payload = {
+            "filterFieldParams": [
+                {
+                    "key": "companyShare.companyIssue.companyISIN.script",
+                    "alias": "Scrip"
+                },
+                {
+                    "key": "companyShare.companyIssue.companyISIN.company.name",
+                    "alias": "Company Name"
+                }
+            ],
+            "page": 1,
+            "size": 20,
+            "searchRoleViewConstants": "VIEW_APPLICANT_FORM_COMPLETE",
+            "filterDateParams": [
+                {
+                    "key": "appliedDate",
+                    "condition": "",
+                    "alias": "",
+                    "value": f"BETWEEN '{two_months_ago}' AND '{today}'"
+                }
+            ]
+        }
+
+        r = requests.post('https://webbackend.cdsc.com.np/api/meroShare/applicantForm/active/search/',
+                          json=payload, headers=self.authorization_headers)
+        if r.ok:
+            objects = r.json()['object']
+            return [self.with_allotment_status(_item) for _item in objects]
+        else:
+            raise ValueError("Error while fetching application reports!!")
+
+    def with_allotment_status(self, _item):
+        application_id = _item['applicantFormId']
+        if _item['statusName'] == 'TRANSACTION_SUCCESS':
+            r = requests.get(
+                f"https://webbackend.cdsc.com.np/api/meroShare/applicantForm/report/detail/{application_id}",
+                headers=self.authorization_headers)
+            if r.ok:
+                allotment_status = r.json()['statusName']
+                _item['allotmentStatus'] = allotment_status
+            else:
+                raise ValueError("Error while fetching application allotment status!!")
+        else:
+            _item['allotmentStatus'] = 'N/A'
+
+        return _item
 
 
 if __name__ == '__main__':
@@ -262,35 +334,32 @@ if __name__ == '__main__':
     )
 
     parser.add_argument('-r', '--report', action='store_true', help='Check IPO allotment reports')
-    name_arg = parser.add_argument('-n', '--name',
-                                   help='Name of the user, runs the script for this user only, default is run for '
-                                        'all users in accounts.csv file')
     parser.add_argument('-a', '--apply', action='store_true', help='Apply to issues', default=False)
-    share_id_arg = parser.add_argument('-id', '--company-share-id',
-                                       help='Company share id to apply, required when -a/--apply flag is set', type=int)
-    parser.add_argument('-s', '--shares', help='Number of shares to apply, default is 10', default=10)
+    name_arg = parser.add_argument('-u', '--user',
+                                   help='Run script for this user only, default is run for all users in accounts.csv '
+                                        'file')
+    share_id_arg = parser.add_argument('-c', '--company-share-id',
+                                       help='Company share ID to apply, required when -a/--apply flag is set', type=int)
+    parser.add_argument('-n', '--number-of-shares', help='Number of shares to apply, default is 10', default=10)
     args = parser.parse_args()
 
-    if args.report:
-        print("Feature coming soon!!")
-        exit(0)
-
-    accounts = find_accounts_from_csv(args.name)
+    accounts = find_accounts_from_csv(args.user)
 
     for account in accounts:
-        print("###################################################")
-        print(f"####  %s  ####" % account.name.capitalize())
-        print("###################################################")
+        print(f"=========  %s  =========" % account.user.capitalize())
 
         user = UserSession(account=account)
 
         if args.report:
-            print("Feature coming soon!!")
+            report = user.generate_reports()
+            for item in report:
+                print(f"{item['companyName']} - {item['allotmentStatus']}")
         elif args.apply:
             if not args.company_share_id:
                 raise argparse.ArgumentError(share_id_arg, "is required when -a/--apply flag is set, run the "
-                                                           "script without any args to find the company share id")
-            user.apply(args.shares, company_share_id=args.company_share_id)
+                                                           "script without any args to find the open issues with "
+                                                           "their company share id")
+            user.apply(args.number_of_shares, company_share_id=args.company_share_id)
         else:
             open_issues = user.open_issues()
             print(*open_issues, sep="\n")
