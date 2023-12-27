@@ -310,7 +310,7 @@ class UserSession:
 
     def with_allotment_status(self, _item):
         application_id = _item['applicantFormId']
-        if _item['statusName'] == 'TRANSACTION_SUCCESS':
+        if _item['statusName'] in ['TRANSACTION_SUCCESS', 'APPROVED']:
             r = requests.get(
                 f"https://webbackend.cdsc.com.np/api/meroShare/applicantForm/report/detail/{application_id}",
                 headers=self.authorization_headers)
