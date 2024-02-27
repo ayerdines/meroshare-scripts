@@ -147,7 +147,8 @@ class UserSession:
                 'clientId': self.account.client_id,
                 'username': self.account.username,
                 'password': self.account.password
-            }
+            },
+            verify=False
         )
 
         if r.ok:
@@ -157,15 +158,30 @@ class UserSession:
 
     def set_branch_info(self):
         bank = self.bank_info()
+        # [{"code":"123","id":123,"name":"Nepal Mega Bank Ltd."}]
         r = requests.get(f"https://webbackend.cdsc.com.np/api/meroShare/bank/{bank['id']}",
-                         headers=self.authorization_headers)
+                         headers=self.authorization_headers, verify=False)
         if r.ok:
-            self.branch_info = r.json()
+            # [
+            #     {
+            #         "accountBranchId": 1234,
+            #         "accountNumber": "123412341234",
+            #         "accountTypeId": 1,
+            #         "accountTypeName": "SAVING ACCOUNT",
+            #         "branchName": "Nepal Mega Bank Ltd. -Pulchowk Branch",
+            #         "id": 1231234
+            #     }
+            # ]
+            branch_info = r.json()[0]
+            branch_info['bankId'] = bank['id']
+            self.branch_info = branch_info
         else:
             raise ValueError("Unable to fetch banks for user: '%s'" % self.account.user)
 
     def bank_info(self):
-        r = requests.get('https://webbackend.cdsc.com.np/api/meroShare/bank/', headers=self.authorization_headers)
+        r = requests.get('https://webbackend.cdsc.com.np/api/meroShare/bank/',
+                         headers=self.authorization_headers,
+                         verify=False)
         if r.ok:
             banks = r.json()
             if len(banks) == 0:
@@ -188,7 +204,7 @@ class UserSession:
     def can_apply(self, company_share_id):
         response = requests.get(
             f"https://webbackend.cdsc.com.np/api/meroShare/applicantForm/customerType/{company_share_id}/{self.demat}",
-            headers=self.authorization_headers).json()
+            headers=self.authorization_headers, verify=False).json()
 
         return True if response['message'] == "Customer can apply." else False
 
@@ -212,6 +228,7 @@ class UserSession:
             "accountNumber": self.branch_info['accountNumber'],
             "customerId": self.branch_info['id'],
             "accountBranchId": self.branch_info['accountBranchId'],
+            "accountTypeId": self.branch_info['accountTypeId'],
             "appliedKitta": str(number_of_shares),
             "crnNumber": self.account.crn,
             "transactionPIN": self.account.pin,
@@ -221,7 +238,8 @@ class UserSession:
 
         r = requests.post('https://webbackend.cdsc.com.np/api/meroShare/applicantForm/share/apply',
                           json=payload,
-                          headers=self.authorization_headers)
+                          headers=self.authorization_headers,
+                          verify=False)
 
         if r.ok:
             print(f"APPLIED SUCCESSFULLY!! -- {company_share_id}")
@@ -266,7 +284,7 @@ class UserSession:
         }
 
         r = requests.post('https://webbackend.cdsc.com.np/api/meroShare/companyShare/applicableIssue/',
-                          json=payload, headers=self.authorization_headers)
+                          json=payload, headers=self.authorization_headers, verify=False)
         if r.ok:
             objects = r.json()['object']
             return [Issue(_item) for _item in objects]
@@ -313,7 +331,8 @@ class UserSession:
         if _item['statusName'] in ['TRANSACTION_SUCCESS', 'APPROVED']:
             r = requests.get(
                 f"https://webbackend.cdsc.com.np/api/meroShare/applicantForm/report/detail/{application_id}",
-                headers=self.authorization_headers)
+                headers=self.authorization_headers,
+                verify=False)
             if r.ok:
                 allotment_status = r.json()['statusName']
                 _item['allotmentStatus'] = allotment_status
